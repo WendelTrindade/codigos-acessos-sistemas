@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Códigos de Acesso</title>
+<style>
+  * { box-sizing: border-box; margin:0; padding:0; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  header { margin-bottom: 24px; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size: 22px; font-weight: 700; color: #f8fafc; }
+  header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 6px; margin-top: 8px;
+  }
+  .badge.off { background: #1e293b; color: #fbbf24; }
+  .badge.on { background: #14532d; color: #86efac; }
+  .userbox { text-align:right; font-size:12px; color:#94a3b8; }
+  .userbox button { margin-top:6px; }
+  .card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+    padding: 20px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; color: #f1f5f9; margin-bottom: 14px; }
+  .card .hint { font-size: 12px; color: #64748b; margin-top: -8px; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+  .field { flex: 1; min-width: 160px; }
+  label { display:block; font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+  input, select {
+    width: 100%; background: #0f172a; border: 1px solid #334155;
+    color: #e2e8f0; padding: 10px 12px; border-radius: 8px; font-size: 14px;
+  }
+  input:focus, select:focus { outline: none; border-color: #6366f1; }
+  button {
+    background: #6366f1; color: #fff; border: none; padding: 11px 18px;
+    border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: #4f46e5; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.secondary { background: #334155; }
+  button.secondary:hover { background: #475569; }
+  button.danger { background: #7f1d1d; }
+  button.danger:hover { background: #991b1b; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #334155; }
+  th { color: #94a3b8; font-weight: 600; font-size: 11px; text-transform: uppercase; }
+  .code-cell { font-family: monospace; font-size: 12px; color: #a5b4fc; word-break: break-all; }
+  .status { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .status.ativo { background: #14532d; color: #86efac; }
+  .status.espera { background: #1e3a5f; color: #93c5fd; }
+  .status.expirado { background: #451a1a; color: #fca5a5; }
+  .status.revogado { background: #451a1a; color: #fca5a5; }
+  .actions { display: flex; gap: 6px; }
+  .actions button { padding: 6px 10px; font-size: 12px; }
+  .empty { color: #64748b; font-size: 13px; padding: 16px 0; text-align: center; }
+  .result-box {
+    margin-top: 12px; padding: 12px 14px; border-radius: 8px; font-size: 13px; display:none;
+  }
+  .result-box.ok { background: #14532d; color: #bbf7d0; display:block; }
+  .result-box.bad { background: #451a1a; color: #fecaca; display:block; }
+
+  .modal-overlay, .login-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: none; align-items: center; justify-content: center; z-index: 50; padding:20px;
+  }
+  .modal-overlay.open, .login-overlay.open { display: flex; }
+  .modal-box, .login-box {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 24px; max-width: 340px; width: 90%; text-align: center;
+  }
+  .modal-box p { font-size: 14px; margin-bottom: 14px; color: #e2e8f0; }
+  .modal-box button { width: 100%; }
+  .login-box h2 { color:#f8fafc; font-size:18px; margin-bottom:6px; }
+  .login-box p.sub { color:#94a3b8; font-size:13px; margin-bottom:18px; }
+  .login-box input { margin-bottom:10px; text-align:center; }
+  .login-box button { width:100%; }
+  .login-erro { color:#fca5a5; font-size:12px; margin-top:10px; min-height:14px; }
+  #app { display:none; }
+</style>
+</head>
+<body>
+
+<div class="login-overlay open" id="telaLogin">
+  <div class="login-box">
+    <h2>Painel de Códigos</h2>
+    <p class="sub">Área restrita — faça login para continuar.</p>
+    <input id="loginEmail" type="email" placeholder="E-mail">
+    <input id="loginSenha" type="password" placeholder="Senha">
+    <button id="btnLogin">Entrar</button>
+    <p class="login-erro" id="loginErro"></p>
+  </div>
+</div>
+
+<div id="app">
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Gerador de Códigos de Acesso</h1>
+      <p>Códigos avulsos, sem vínculo com sistema. A validade só começa a contar no primeiro uso.</p>
+      <span class="badge off" id="badgeFirebase">Aguardando configuração do Firebase</span>
+    </div>
+    <div class="userbox">
+      <div id="userEmailLabel"></div>
+      <button class="secondary" id="btnLogout">Sair</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>Gerar novo código</h2>
+    <div class="hint">O código funciona em qualquer sistema que aceitar essa validação. O relógio da validade só começa a correr quando ele for usado pela primeira vez.</div>
+    <div class="row">
+      <div class="field">
+        <label>Validade após ativação</label>
+        <select id="inputValidade">
+          <option value="3600">1 hora</option>
+          <option value="86400">1 dia</option>
+          <option value="604800">1 semana</option>
+          <option value="2592000" selected>1 mês</option>
+          <option value="7776000">3 meses</option>
+          <option value="15552000">6 meses</option>
+          <option value="31536000">1 ano</option>
+          <option value="63072000">2 anos</option>
+          <option value="custom">Personalizado (dias)</option>
+        </select>
+      </div>
+      <div class="field" id="campoCustom" style="display:none;">
+        <label>Dias de validade</label>
+        <input type="number" id="inputCustomDias" min="1" placeholder="ex: 45">
+      </div>
+      <div class="field">
+        <label>Quantos códigos gerar</label>
+        <input type="number" id="inputQuantidade" min="1" value="1">
+      </div>
+    </div>
+    <button id="btnGerar">Gerar código(s)</button>
+  </div>
+
+  <div class="card">
+    <h2>Códigos gerados</h2>
+    <div id="tabelaWrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>Simular uso (o que o sistema do cliente faria)</h2>
+    <div class="hint">Colar um código aqui simula o momento em que um sistema recebe e valida o código pela primeira vez — nesse instante a validade é ativada.</div>
+    <div class="row">
+      <div class="field">
+        <label>Código de acesso</label>
+        <input type="text" id="inputValidar" placeholder="cole um código gerado acima">
+      </div>
+    </div>
+    <button class="secondary" id="btnValidar">Validar / Ativar</button>
+    <div id="resultadoValidacao" class="result-box"></div>
+  </div>
+</div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <p id="modalTexto"></p>
+    <button id="modalFechar">OK</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CONFIGURAÇÃO DO FIREBASE — cole aqui os dados do projeto
+   ========================================================= */
+const CONFIG = {
+  projectId: 'COLE_O_PROJECT_ID_AQUI',
+  apiKey: 'COLE_A_API_KEY_AQUI',
+  colecao: 'codigos'
+};
+
+const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+const TAMANHO_CODIGO = 17;
+const TOKEN_KEY = 'painel_auth_token_v1';
+
+function configurado() {
+  return CONFIG.projectId && CONFIG.projectId.indexOf('COLE_') !== 0 &&
+         CONFIG.apiKey && CONFIG.apiKey.indexOf('COLE_') !== 0;
+}
+
+function urlColecao() {
+  return `https://firestore.googleapis.com/v1/projects/${CONFIG.projectId}/databases/(default)/documents/${CONFIG.colecao}`;
+}
+function urlDoc(codigo) {
+  return `${urlColecao()}/${encodeURIComponent(codigo)}`;
+}
+function keyParam(sep) {
+  return `${sep}key=${CONFIG.apiKey}`;
+}
+
+function getSessao() {
+  try { return JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null'); } catch (e) { return null; }
+}
+function authHeaders() {
+  const s = getSessao();
+  return s && s.idToken ? { 'Authorization': 'Bearer ' + s.idToken } : {};
+}
+
+/* ---------- Login (Firebase Authentication REST) ---------- */
+document.getElementById('btnLogin').addEventListener('click', async function () {
+  const email = document.getElementById('loginEmail').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  const erro = document.getElementById('loginErro');
+  erro.textContent = '';
+
+  if (!configurado()) { erro.textContent = 'Configure o Firebase (projectId/apiKey) antes de logar.'; return; }
+  if (!email || !senha) { erro.textContent = 'Preencha e-mail e senha.'; return; }
+
+  this.disabled = true;
+  try {
+    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${CONFIG.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: senha, returnSecureToken: true })
+    });
+    if (!res.ok) { erro.textContent = 'E-mail ou senha inválidos.'; this.disabled = false; return; }
+    const data = await res.json();
+    sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ idToken: data.idToken, email: data.email }));
+    entrarNoPainel(data.email);
+  } catch (e) {
+    erro.textContent = 'Erro de conexão.';
+    this.disabled = false;
+  }
+});
+
+document.getElementById('btnLogout').addEventListener('click', function () {
+  sessionStorage.removeItem(TOKEN_KEY);
+  location.reload();
+});
+
+function entrarNoPainel(email) {
+  document.getElementById('telaLogin').classList.remove('open');
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('userEmailLabel').textContent = email || '';
+  atualizarBadgeFirebase();
+  renderizarTabela();
+}
+
+/* ---------- Utilidades ---------- */
+function gerarCodigoAleatorio() {
+  const bytes = new Uint32Array(TAMANHO_CODIGO);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < TAMANHO_CODIGO; i++) out += CHARSET[bytes[i] % CHARSET.length];
+  return out;
+}
+function formatarData(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function formatarDuracao(segundos) {
+  const mapa = { 3600:'1 hora', 86400:'1 dia', 604800:'1 semana', 2592000:'1 mês', 7776000:'3 meses', 15552000:'6 meses', 31536000:'1 ano', 63072000:'2 anos' };
+  if (mapa[segundos]) return mapa[segundos];
+  return Math.round(segundos / 86400) + ' dia(s)';
+}
+function abrirModal(texto) {
+  document.getElementById('modalTexto').textContent = texto;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+document.getElementById('modalFechar').addEventListener('click', () => {
+  document.getElementById('modalOverlay').classList.remove('open');
+});
+
+/* ---------- Firestore REST ---------- */
+function fromFsDoc(doc) {
+  const f = doc.fields || {};
+  return {
+    codigoAcesso: doc.name.split('/').pop(),
+    duracaoSegundos: f.duracaoSegundos ? parseInt(f.duracaoSegundos.integerValue, 10) : 0,
+    criadoEm: f.criadoEm && f.criadoEm.timestampValue ? f.criadoEm.timestampValue : null,
+    primeiraAtivacaoEm: f.primeiraAtivacaoEm && f.primeiraAtivacaoEm.timestampValue ? f.primeiraAtivacaoEm.timestampValue : null,
+    expiraEm: f.expiraEm && f.expiraEm.timestampValue ? f.expiraEm.timestampValue : null,
+    ativo: f.ativo ? !!f.ativo.booleanValue : true
+  };
+}
+async function listarRegistros() {
+  const res = await fetch(urlColecao() + '?pageSize=300' + keyParam('&'), { headers: authHeaders() });
+  if (!res.ok) throw new Error('Falha ao listar');
+  const data = await res.json();
+  if (!data.documents) return [];
+  return data.documents.map(fromFsDoc).sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || ''));
+}
+async function criarRegistro(codigo, duracaoSegundos) {
+  const body = { fields: {
+    duracaoSegundos: { integerValue: String(duracaoSegundos) },
+    criadoEm: { timestampValue: new Date().toISOString() },
+    primeiraAtivacaoEm: { nullValue: null },
+    expiraEm: { nullValue: null },
+    ativo: { booleanValue: true }
+  }};
+  const url = urlColecao() + '?documentId=' + encodeURIComponent(codigo) + keyParam('&');
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error('Falha ao criar');
+}
+async function revogarRegistro(codigo) {
+  const url = urlDoc(codigo) + '?updateMask.fieldPaths=ativo' + keyParam('&');
+  const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ fields: { ativo: { booleanValue: false } } }) });
+  if (!res.ok) throw new Error('Falha ao revogar');
+}
+async function ativarRegistro(codigo, duracaoSegundos) {
+  const agora = new Date();
+  const expira = new Date(agora.getTime() + duracaoSegundos * 1000);
+  const url = urlDoc(codigo) + '?updateMask.fieldPaths=primeiraAtivacaoEm&updateMask.fieldPaths=expiraEm' + keyParam('&');
+  const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ fields: {
+      primeiraAtivacaoEm: { timestampValue: agora.toISOString() },
+      expiraEm: { timestampValue: expira.toISOString() }
+    }})
+  });
+  if (!res.ok) throw new Error('Falha ao ativar');
+  return expira;
+}
+
+/* ---------- UI ---------- */
+document.getElementById('inputValidade').addEventListener('change', function () {
+  document.getElementById('campoCustom').style.display = this.value === 'custom' ? 'block' : 'none';
+});
+function statusDoRegistro(registro) {
+  if (!registro.ativo) return 'revogado';
+  if (!registro.primeiraAtivacaoEm) return 'espera';
+  if (new Date(registro.expiraEm).getTime() < Date.now()) return 'expirado';
+  return 'ativo';
+}
+function atualizarBadgeFirebase() {
+  const badge = document.getElementById('badgeFirebase');
+  if (!configurado()) { badge.className = 'badge off'; badge.textContent = 'Aguardando configuração do Firebase'; return; }
+  badge.className = 'badge on';
+  badge.textContent = 'Conectado ao projeto ' + CONFIG.projectId;
+}
+
+document.getElementById('btnGerar').addEventListener('click', async function () {
+  if (!configurado()) { abrirModal('Configure o Firebase (projectId e apiKey) no topo do arquivo antes de gerar códigos.'); return; }
+  const validadeSel = document.getElementById('inputValidade').value;
+  const quantidade = Math.max(1, parseInt(document.getElementById('inputQuantidade').value, 10) || 1);
+  let segundos;
+  if (validadeSel === 'custom') {
+    const dias = parseInt(document.getElementById('inputCustomDias').value, 10);
+    if (!dias || dias <= 0) { abrirModal('Informe um número válido de dias para a validade personalizada.'); return; }
+    segundos = dias * 86400;
+  } else segundos = parseInt(validadeSel, 10);
+
+  const btn = this; btn.disabled = true; btn.textContent = 'Gerando...';
+  try {
+    for (let i = 0; i < quantidade; i++) await criarRegistro(gerarCodigoAleatorio(), segundos);
+    document.getElementById('inputCustomDias').value = '';
+    await renderizarTabela();
+    abrirModal(quantidade === 1 ? 'Código gerado com sucesso.' : quantidade + ' códigos gerados com sucesso.');
+  } catch (e) {
+    abrirModal('Erro ao gerar código. Confira login, projectId/apiKey e as regras do Firestore.');
+  } finally { btn.disabled = false; btn.textContent = 'Gerar código(s)'; }
+});
+
+async function renderizarTabela() {
+  const wrap = document.getElementById('tabelaWrap');
+  if (!configurado()) {
+    wrap.innerHTML = '';
+    const p = document.createElement('div'); p.className = 'empty'; p.textContent = 'Configure o Firebase para começar a gerar e listar códigos.';
+    wrap.appendChild(p); return;
+  }
+  let lista;
+  try { lista = await listarRegistros(); } catch (e) {
+    wrap.innerHTML = '';
+    const p = document.createElement('div'); p.className = 'empty'; p.textContent = 'Não foi possível carregar os códigos. Confira login e configuração do Firebase.';
+    wrap.appendChild(p); return;
+  }
+  wrap.innerHTML = '';
+  if (lista.length === 0) {
+    const p = document.createElement('div'); p.className = 'empty'; p.textContent = 'Nenhum código gerado ainda.';
+    wrap.appendChild(p); return;
+  }
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+  ['Código', 'Validade', 'Status', 'Ações'].forEach(txt => { const th = document.createElement('th'); th.textContent = txt; trHead.appendChild(th); });
+  thead.appendChild(trHead); table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+
+  lista.forEach((registro) => {
+    const status = statusDoRegistro(registro);
+    const tr = document.createElement('tr');
+
+    const tdCodigo = document.createElement('td'); tdCodigo.className = 'code-cell'; tdCodigo.textContent = registro.codigoAcesso; tr.appendChild(tdCodigo);
+
+    const tdValidade = document.createElement('td');
+    if (status === 'espera') tdValidade.textContent = formatarDuracao(registro.duracaoSegundos) + ' (a partir do 1º uso)';
+    else if (status === 'ativo' || status === 'expirado') tdValidade.textContent = 'até ' + formatarData(registro.expiraEm);
+    else tdValidade.textContent = formatarDuracao(registro.duracaoSegundos);
+    tr.appendChild(tdValidade);
+
+    const tdStatus = document.createElement('td');
+    const span = document.createElement('span'); span.className = 'status ' + status;
+    const textos = { ativo:'Ativo', espera:'Aguardando ativação', expirado:'Expirado', revogado:'Revogado' };
+    span.textContent = textos[status]; tdStatus.appendChild(span); tr.appendChild(tdStatus);
+
+    const tdAcoes = document.createElement('td');
+    const divActions = document.createElement('div'); divActions.className = 'actions';
+
+    const btnCopiar = document.createElement('button'); btnCopiar.className = 'secondary'; btnCopiar.textContent = 'Copiar';
+    btnCopiar.addEventListener('click', () => {
+      navigator.clipboard.writeText(registro.codigoAcesso).then(() => abrirModal('Código copiado para a área de transferência.'))
+        .catch(() => abrirModal('Não foi possível copiar automaticamente. Selecione o código manualmente.'));
+    });
+    divActions.appendChild(btnCopiar);
+
+    if (status !== 'revogado') {
+      const btnRevogar = document.createElement('button'); btnRevogar.className = 'danger'; btnRevogar.textContent = 'Revogar';
+      btnRevogar.addEventListener('click', async () => {
+        btnRevogar.disabled = true;
+        try { await revogarRegistro(registro.codigoAcesso); await renderizarTabela(); abrirModal('Código revogado. Deixará de funcionar mesmo se ainda não tiver sido usado.'); }
+        catch (e) { abrirModal('Erro ao revogar o código.'); btnRevogar.disabled = false; }
+      });
+      divActions.appendChild(btnRevogar);
+    }
+    tdAcoes.appendChild(divActions); tr.appendChild(tdAcoes);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); wrap.appendChild(table);
+}
+
+document.getElementById('btnValidar').addEventListener('click', async function () {
+  const codigo = document.getElementById('inputValidar').value.trim();
+  const box = document.getElementById('resultadoValidacao');
+  box.className = 'result-box';
+  if (!configurado()) { box.classList.add('bad'); box.textContent = 'Configure o Firebase antes de simular a validação.'; return; }
+  if (!codigo) { box.classList.add('bad'); box.textContent = 'Informe um código para validar.'; return; }
+  const btn = this; btn.disabled = true;
+  try {
+    const res = await fetch(urlDoc(codigo) + '?' + keyParam(''));
+    if (!res.ok) { box.classList.add('bad'); box.textContent = 'Código inválido: não encontrado.'; return; }
+    const doc = await res.json();
+    const registro = fromFsDoc(doc);
+    const statusAtual = statusDoRegistro(registro);
+    if (statusAtual === 'revogado') { box.classList.add('bad'); box.textContent = 'Código revogado. Acesso bloqueado.'; }
+    else if (statusAtual === 'espera') {
+      const expira = await ativarRegistro(codigo, registro.duracaoSegundos);
+      await renderizarTabela();
+      box.classList.add('ok'); box.textContent = 'Código ativado agora pela primeira vez. Válido até ' + formatarData(expira.toISOString()) + '.';
+    } else if (statusAtual === 'expirado') { box.classList.add('bad'); box.textContent = 'Código expirado em ' + formatarData(registro.expiraEm) + '.'; }
+    else { box.classList.add('ok'); box.textContent = 'Código válido — acesso liberado até ' + formatarData(registro.expiraEm) + '.'; }
+  } catch (e) { box.classList.add('bad'); box.textContent = 'Erro ao validar. Confira a conexão e a configuração do Firebase.'; }
+  finally { btn.disabled = false; }
+});
+
+/* ---------- Inicialização ---------- */
+(function init() {
+  const s = getSessao();
+  if (s && s.idToken) entrarNoPainel(s.email);
+})();
+</script>
+</body>
+</html>
