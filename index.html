@@ -143,7 +143,10 @@
   </div>
 
   <div class="card">
-    <h2>Códigos gerados</h2>
+    <h2 style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Códigos gerados</span>
+      <button class="secondary" id="btnLimparExpirados" style="font-size:12px;padding:6px 10px;">Limpar expirados/revogados</button>
+    </h2>
     <div id="tabelaWrap"></div>
   </div>
 
@@ -166,6 +169,16 @@
   <div class="modal-box">
     <p id="modalTexto"></p>
     <button id="modalFechar">OK</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalConfirmOverlay">
+  <div class="modal-box">
+    <p id="modalConfirmTexto"></p>
+    <div style="display:flex;gap:8px;">
+      <button class="secondary" id="modalConfirmCancelar" style="flex:1;">Cancelar</button>
+      <button class="danger" id="modalConfirmOk" style="flex:1;">Confirmar</button>
+    </div>
   </div>
 </div>
 
@@ -270,6 +283,22 @@ document.getElementById('modalFechar').addEventListener('click', () => {
   document.getElementById('modalOverlay').classList.remove('open');
 });
 
+let _onConfirmar = null;
+function abrirConfirmacao(texto, onConfirmar) {
+  document.getElementById('modalConfirmTexto').textContent = texto;
+  _onConfirmar = onConfirmar;
+  document.getElementById('modalConfirmOverlay').classList.add('open');
+}
+document.getElementById('modalConfirmCancelar').addEventListener('click', () => {
+  document.getElementById('modalConfirmOverlay').classList.remove('open');
+  _onConfirmar = null;
+});
+document.getElementById('modalConfirmOk').addEventListener('click', () => {
+  document.getElementById('modalConfirmOverlay').classList.remove('open');
+  if (_onConfirmar) _onConfirmar();
+  _onConfirmar = null;
+});
+
 /* ---------- Firestore REST ---------- */
 function fromFsDoc(doc) {
   const f = doc.fields || {};
@@ -305,6 +334,11 @@ async function revogarRegistro(codigo) {
   const url = urlDoc(codigo) + '?updateMask.fieldPaths=ativo' + keyParam('&');
   const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ fields: { ativo: { booleanValue: false } } }) });
   if (!res.ok) throw new Error('Falha ao revogar');
+}
+async function deletarRegistro(codigo) {
+  const url = urlDoc(codigo) + '?' + keyParam('');
+  const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
+  if (!res.ok) throw new Error('Falha ao apagar');
 }
 async function ativarRegistro(codigo, duracaoSegundos) {
   const agora = new Date();
@@ -357,6 +391,34 @@ document.getElementById('btnGerar').addEventListener('click', async function () 
   } catch (e) {
     abrirModal('Erro ao gerar código. Confira login, projectId/apiKey e as regras do Firestore.');
   } finally { btn.disabled = false; btn.textContent = 'Gerar código(s)'; }
+});
+
+document.getElementById('btnLimparExpirados').addEventListener('click', async function () {
+  if (!configurado()) { abrirModal('Configure o Firebase antes.'); return; }
+  let lista;
+  try { lista = await listarRegistros(); } catch (e) { abrirModal('Não foi possível carregar os códigos.'); return; }
+
+  const paraApagar = lista.filter(r => {
+    const s = statusDoRegistro(r);
+    return s === 'expirado' || s === 'revogado';
+  });
+
+  if (paraApagar.length === 0) { abrirModal('Nenhum código expirado ou revogado para limpar.'); return; }
+
+  abrirConfirmacao(
+    `Isso vai apagar permanentemente ${paraApagar.length} código(s) expirado(s)/revogado(s). Não dá pra desfazer. Confirmar?`,
+    async () => {
+      const btn = document.getElementById('btnLimparExpirados');
+      btn.disabled = true; btn.textContent = 'Limpando...';
+      let falhas = 0;
+      for (const r of paraApagar) {
+        try { await deletarRegistro(r.codigoAcesso); } catch (e) { falhas++; }
+      }
+      await renderizarTabela();
+      btn.disabled = false; btn.textContent = 'Limpar expirados/revogados';
+      abrirModal(falhas === 0 ? `${paraApagar.length} código(s) removido(s) com sucesso.` : `${paraApagar.length - falhas} removido(s), ${falhas} falharam.`);
+    }
+  );
 });
 
 async function renderizarTabela() {
